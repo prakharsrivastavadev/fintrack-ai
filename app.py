@@ -2,22 +2,40 @@
 FinTrack AI
 app.py
 
-Personal Finance Dashboard built with Streamlit.
+Personal Finance Dashboard
+
+Author: Prakhar Srivastava
 """
 
 from __future__ import annotations
 
-import streamlit as st
 import pandas as pd
+import plotly.express as px
+import streamlit as st
 
 from utils import (
+    app_information,
+    balance_chart_data,
+    category_summary,
+    current_month_summary,
+    dashboard_summary,
     ensure_storage,
+    expense_chart_data,
+    export_transactions,
+    filter_transactions,
+    format_currency,
+    get_categories,
+    health_report,
+    income_chart_data,
+    last_updated,
     load_transactions,
+    monthly_summary,
+    recent_transactions,
 )
 
-# -------------------------------------------------------
-# Page Configuration
-# -------------------------------------------------------
+# ==========================================================
+# PAGE CONFIGURATION
+# ==========================================================
 
 st.set_page_config(
     page_title="FinTrack AI",
@@ -25,54 +43,43 @@ st.set_page_config(
     layout="wide",
 )
 
-# -------------------------------------------------------
-# Simple Styling
-# -------------------------------------------------------
+# ==========================================================
+# CUSTOM CSS
+# ==========================================================
 
 st.markdown(
     """
-    <style>
-    .main{
-        padding-top:1rem;
-    }
-    div[data-testid="stMetric"]{
-        border:1px solid #dddddd;
-        border-radius:12px;
-        padding:10px;
-    }
-    </style>
-    """,
+<style>
+
+.block-container{
+    padding-top:1.2rem;
+}
+
+div[data-testid="stMetric"]{
+    border:1px solid #dcdcdc;
+    border-radius:12px;
+    padding:12px;
+}
+
+</style>
+""",
     unsafe_allow_html=True,
 )
 
-# -------------------------------------------------------
-# Title
-# -------------------------------------------------------
-
-st.title("💰 FinTrack AI")
-st.caption("Track income, expenses and financial health.")
-
-# -------------------------------------------------------
-# Sidebar
-# -------------------------------------------------------
-
-with st.sidebar:
-    st.header("Navigation")
-    st.success("FinTrack AI Ready")
-
-# -------------------------------------------------------
-# Initialize Storage
-# -------------------------------------------------------
+# ==========================================================
+# INITIALIZE STORAGE
+# ==========================================================
 
 try:
     ensure_storage()
+
 except Exception as exc:
-    st.error(f"Unable to initialize storage.\n\n{exc}")
+    st.error(f"Storage initialization failed.\n\n{exc}")
     st.stop()
 
-# -------------------------------------------------------
-# Load Data
-# -------------------------------------------------------
+# ==========================================================
+# LOAD DATA
+# ==========================================================
 
 try:
     df = load_transactions()
@@ -81,20 +88,16 @@ except Exception as exc:
     st.error(f"Unable to load transaction data.\n\n{exc}")
     st.stop()
 
-# -------------------------------------------------------
-# Safety Checks
-# -------------------------------------------------------
-
 if df is None:
     df = pd.DataFrame()
 
 if not isinstance(df, pd.DataFrame):
-    st.error("Invalid data returned by utils.py")
+    st.error("Invalid data returned from utils.py")
     st.stop()
 
-# -------------------------------------------------------
-# Session State
-# -------------------------------------------------------
+# ==========================================================
+# SESSION STATE
+# ==========================================================
 
 if "selected_index" not in st.session_state:
     st.session_state.selected_index = None
@@ -102,35 +105,34 @@ if "selected_index" not in st.session_state:
 if "refresh_counter" not in st.session_state:
     st.session_state.refresh_counter = 0
 
-# -------------------------------------------------------
-# Empty Dataset
-# -------------------------------------------------------
+# ==========================================================
+# APPLICATION HEADER
+# ==========================================================
+
+info = app_information()
+
+st.title(f"💰 {info['app_name']}")
+
+st.caption(
+    f"Version {info['version']} • {info['author']}"
+)
+
+st.divider()
+
+# ==========================================================
+# EMPTY DATASET MESSAGE
+# ==========================================================
 
 if df.empty:
     st.info(
-        "No transactions available yet.\n\n"
-        "Use the Add Transaction section to create your first record."
-    )
-
-st.divider()
-# -------------------------------------------------------
-# Additional Imports
-# -------------------------------------------------------
-
-from utils import (
-    dashboard_summary,
-    format_currency,
+        "No transactions found.\n\n"
+        "Add your first transaction to begin tracking your finances."
 )
+# ==========================================================
+# DASHBOARD SUMMARY
+# ==========================================================
 
-# -------------------------------------------------------
-# Dashboard Summary
-# -------------------------------------------------------
-
-try:
-    summary = dashboard_summary(df)
-except Exception as exc:
-    st.error(f"Unable to calculate dashboard summary.\n\n{exc}")
-    st.stop()
+summary = dashboard_summary(df)
 
 st.subheader("📊 Dashboard")
 
@@ -138,57 +140,90 @@ col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     st.metric(
-        "Total Income",
-        format_currency(float(summary.get("income", 0))),
+        "💰 Total Income",
+        format_currency(summary["income"]),
     )
 
 with col2:
     st.metric(
-        "Total Expense",
-        format_currency(float(summary.get("expense", 0))),
+        "💸 Total Expense",
+        format_currency(summary["expense"]),
     )
 
 with col3:
     st.metric(
-        "Net Balance",
-        format_currency(float(summary.get("balance", 0))),
+        "🏦 Net Balance",
+        format_currency(summary["balance"]),
     )
 
 with col4:
     st.metric(
-        "Transactions",
-        int(summary.get("transactions", 0)),
+        "📝 Transactions",
+        summary["transactions"],
     )
 
-col5, col6 = st.columns(2)
+st.divider()
 
-with col5:
+# ==========================================================
+# AVERAGE STATISTICS
+# ==========================================================
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric(
+        "Average Income",
+        format_currency(summary["average_income"]),
+    )
+
+with col2:
+    st.metric(
+        "Average Expense",
+        format_currency(summary["average_expense"]),
+    )
+
+with col3:
     st.metric(
         "Savings Rate",
-        f"{float(summary.get('savings_rate', 0)):.2f}%",
+        f"{summary['savings_rate']:.2f}%",
     )
 
-with col6:
-    avg_income = float(summary.get("average_income", 0))
-    avg_expense = float(summary.get("average_expense", 0))
+st.divider()
 
+# ==========================================================
+# CURRENT MONTH SUMMARY
+# ==========================================================
+
+month = current_month_summary(df)
+
+st.subheader("📅 Current Month")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
     st.metric(
-        "Average Income / Expense",
-        f"{format_currency(avg_income)} / {format_currency(avg_expense)}",
+        "Income",
+        format_currency(month["income"]),
+    )
+
+with col2:
+    st.metric(
+        "Expense",
+        format_currency(month["expense"]),
+    )
+
+with col3:
+    st.metric(
+        "Balance",
+        format_currency(month["balance"]),
     )
 
 st.divider()
 # ==========================================================
-# PART 3 — SEARCH, FILTERS & TRANSACTION TABLE
+# SEARCH & FILTERS
 # ==========================================================
 
-from utils import (
-    filter_transactions,
-    recent_transactions,
-    get_categories,
-)
-
-st.subheader("🔍 Search & Filters")
+st.subheader("🔍 Search Transactions")
 
 col1, col2, col3 = st.columns(3)
 
@@ -199,387 +234,387 @@ with col1:
     )
 
 with col2:
-    categories = ["All"] + list(get_categories(df))
+    category_list = ["All"] + get_categories(df)
+
     category = st.selectbox(
         "Category",
-        categories,
+        category_list,
     )
 
 with col3:
     keyword = st.text_input(
-        "Search Description",
-        placeholder="Search transactions...",
+        "Description",
+        placeholder="Search description...",
     )
 
 try:
+
     filtered_df = filter_transactions(
         df=df,
         transaction_type=None if transaction_type == "All" else transaction_type,
         category=None if category == "All" else category,
-        keyword=keyword.strip() if keyword.strip() else None,
+        keyword=keyword if keyword.strip() else None,
     )
+
 except Exception as exc:
-    st.error(f"Filtering failed: {exc}")
+
+    st.error(f"Unable to filter transactions.\n\n{exc}")
+
     filtered_df = df.copy()
 
 st.divider()
 
+# ==========================================================
+# TRANSACTION TABLE
+# ==========================================================
+
 st.subheader("📋 Transactions")
 
 if filtered_df.empty:
+
     st.info("No matching transactions found.")
+
 else:
-    display_df = (
-        filtered_df.sort_values("Date", ascending=False)
-        .reset_index(drop=True)
-    )
 
     st.dataframe(
-        display_df,
+        filtered_df,
         use_container_width=True,
         hide_index=True,
     )
 
-    st.download_button(
-        label="⬇ Download Filtered CSV",
-        data=display_df.to_csv(index=False),
-        file_name="transactions.csv",
-        mime="text/csv",
-    )
-
 st.divider()
+
+# ==========================================================
+# RECENT TRANSACTIONS
+# ==========================================================
 
 st.subheader("🕒 Recent Transactions")
 
 try:
-    recent_df = recent_transactions(df=df, limit=10)
+
+    recent_df = recent_transactions(
+        limit=10,
+        df=df,
+    )
 
     if recent_df.empty:
+
         st.info("No recent transactions available.")
+
     else:
+
         st.dataframe(
-            recent_df.reset_index(drop=True),
+            recent_df,
             use_container_width=True,
             hide_index=True,
         )
 
 except Exception as exc:
-    st.warning(f"Unable to load recent transactions: {exc}")
+
+    st.warning(f"Unable to load recent transactions.\n\n{exc}")
 
 st.divider()
 # ==========================================================
-# PART 4 — CHARTS & ANALYTICS
+# CHARTS & ANALYTICS
 # ==========================================================
-
-import plotly.express as px
-
-from utils import (
-    expense_chart_data,
-    income_chart_data,
-    balance_chart_data,
-    category_summary,
-    monthly_summary,
-)
 
 st.subheader("📈 Financial Analytics")
 
 col1, col2 = st.columns(2)
 
 # ----------------------------------------------------------
-# Expense by Category
+# Expense Distribution
 # ----------------------------------------------------------
 
 with col1:
-    try:
-        expense_df = expense_chart_data(df)
 
-        if not expense_df.empty:
-            fig = px.pie(
-                expense_df,
-                names="Category",
-                values="Amount",
-                title="Expense Distribution",
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No expense data available.")
+    expense_df = expense_chart_data(df)
 
-    except Exception as exc:
-        st.warning(f"Expense chart unavailable: {exc}")
+    if expense_df.empty:
+
+        st.info("No expense data available.")
+
+    else:
+
+        fig = px.pie(
+            expense_df,
+            names="Category",
+            values="Amount",
+            title="Expense Distribution",
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+        )
 
 # ----------------------------------------------------------
-# Income by Category
+# Income Distribution
 # ----------------------------------------------------------
 
 with col2:
-    try:
-        income_df = income_chart_data(df)
 
-        if not income_df.empty:
-            fig = px.pie(
-                income_df,
-                names="Category",
-                values="Amount",
-                title="Income Distribution",
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No income data available.")
+    income_df = income_chart_data(df)
 
-    except Exception as exc:
-        st.warning(f"Income chart unavailable: {exc}")
+    if income_df.empty:
 
-st.divider()
+        st.info("No income data available.")
 
-# ----------------------------------------------------------
-# Monthly Balance Trend
-# ----------------------------------------------------------
-
-try:
-    balance_df = balance_chart_data(df)
-
-    if not balance_df.empty:
-        fig = px.line(
-            balance_df,
-            x="Month",
-            y="Balance",
-            markers=True,
-            title="Monthly Balance Trend",
-        )
-        st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("No balance trend available.")
 
-except Exception as exc:
-    st.warning(f"Balance chart unavailable: {exc}")
+        fig = px.pie(
+            income_df,
+            names="Category",
+            values="Amount",
+            title="Income Distribution",
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+        )
 
 st.divider()
 
-# ----------------------------------------------------------
-# Category Summary
-# ----------------------------------------------------------
+# ==========================================================
+# MONTHLY BALANCE TREND
+# ==========================================================
+
+st.subheader("📊 Monthly Balance")
+
+balance_df = balance_chart_data(df)
+
+if balance_df.empty:
+
+    st.info("No monthly balance available.")
+
+else:
+
+    fig = px.line(
+        balance_df,
+        x="Month",
+        y="Balance",
+        markers=True,
+        title="Monthly Balance Trend",
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+    )
+
+st.divider()
+
+# ==========================================================
+# CATEGORY SUMMARY
+# ==========================================================
 
 st.subheader("📂 Category Summary")
 
-try:
-    cat_df = category_summary(df)
+category_df = category_summary(df=df)
 
-    if not cat_df.empty:
-        st.dataframe(
-            cat_df.reset_index(drop=True),
-            use_container_width=True,
-            hide_index=True,
-        )
-    else:
-        st.info("No category summary available.")
+if category_df.empty:
 
-except Exception as exc:
-    st.warning(f"Category summary unavailable: {exc}")
+    st.info("No category summary available.")
+
+else:
+
+    st.dataframe(
+        category_df,
+        use_container_width=True,
+        hide_index=True,
+    )
 
 st.divider()
 
-# ----------------------------------------------------------
-# Monthly Summary
-# ----------------------------------------------------------
+# ==========================================================
+# MONTHLY SUMMARY
+# ==========================================================
 
 st.subheader("📅 Monthly Summary")
 
-try:
-    month_df = monthly_summary(df)
+monthly_df = monthly_summary(df)
 
-    if not month_df.empty:
-        st.dataframe(
-            month_df.reset_index(drop=True),
-            use_container_width=True,
-            hide_index=True,
-        )
-    else:
-        st.info("No monthly summary available.")
+if monthly_df.empty:
 
-except Exception as exc:
-    st.warning(f"Monthly summary unavailable: {exc}")
+    st.info("No monthly summary available.")
+
+else:
+
+    st.dataframe(
+        monthly_df,
+        use_container_width=True,
+        hide_index=True,
+    )
 
 st.divider()
 # ==========================================================
-# PART 5 — INSIGHTS, EXPORT & DATA OVERVIEW
+# FINANCIAL HEALTH
 # ==========================================================
 
-from utils import (
-    health_report,
-    export_transactions,
-)
-
-st.subheader("🧠 Financial Health")
+st.subheader("🩺 Financial Health")
 
 try:
+
     report = health_report(df)
 
-    c1, c2, c3 = st.columns(3)
+    col1, col2, col3 = st.columns(3)
 
-    with c1:
-        st.metric("Status", report.get("status", "N/A"))
+    with col1:
+        st.metric(
+            "Status",
+            report["status"],
+        )
 
-    with c2:
+    with col2:
         st.metric(
             "Savings Rate",
-            f"{report.get('savings_rate',0):.2f}%"
+            f"{report['savings_rate']:.2f}%",
         )
 
-    with c3:
+    with col3:
         st.metric(
             "Net Balance",
-            format_currency(report.get("balance",0))
+            format_currency(report["balance"]),
         )
 
-    warnings = report.get("warnings", [])
-
-    if warnings:
-        st.warning("Recommendations")
-
-        for warning in warnings:
-            st.write(f"• {warning}")
-    else:
-        st.success("Financial health looks good.")
-
 except Exception as exc:
-    st.error(f"Health report failed: {exc}")
+
+    st.error(f"Unable to generate health report.\n\n{exc}")
 
 st.divider()
 
-# ----------------------------------------------------------
+# ==========================================================
+# DATASET PREVIEW
+# ==========================================================
 
 st.subheader("📄 Dataset Preview")
 
-preview_rows = min(len(df), 15)
+preview_rows = st.slider(
+    "Rows to Preview",
+    min_value=5,
+    max_value=50,
+    value=10,
+)
 
-if preview_rows:
+if df.empty:
+
+    st.info("No transactions available.")
+
+else:
+
     st.dataframe(
         df.head(preview_rows),
         use_container_width=True,
         hide_index=True,
     )
-else:
-    st.info("No transactions available.")
 
 st.divider()
 
-# ----------------------------------------------------------
+# ==========================================================
+# EXPORT
+# ==========================================================
 
-st.subheader("📤 Export")
+st.subheader("📤 Export Transactions")
 
-try:
-    csv_data = export_transactions(df=df)
+csv_data = df.to_csv(index=False)
 
-    st.download_button(
-        "⬇ Download Transactions",
-        csv_data,
-        file_name="fintrack_transactions.csv",
-        mime="text/csv",
+st.download_button(
+    label="⬇ Download CSV",
+    data=csv_data,
+    file_name="fintrack_transactions.csv",
+    mime="text/csv",
+)
+
+st.divider()
+
+# ==========================================================
+# APPLICATION DETAILS
+# ==========================================================
+
+st.subheader("ℹ️ Application Details")
+
+info = app_information()
+
+left, right = st.columns(2)
+
+with left:
+
+    st.write(f"**Application:** {info['app_name']}")
+    st.write(f"**Version:** {info['version']}")
+
+with right:
+
+    st.write(f"**Author:** {info['author']}")
+    st.write(f"**Last Updated:** {last_updated()}")
+
+st.divider()
+# ==========================================================
+# DATA QUALITY
+# ==========================================================
+
+st.subheader("🛡️ Data Quality")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric(
+        "Transactions",
+        len(df),
     )
 
-except Exception as exc:
-    st.error(f"Export failed: {exc}")
-
-st.divider()
-
-# ----------------------------------------------------------
-
-st.subheader("📊 Dataset Statistics")
-
-c1, c2, c3 = st.columns(3)
-
-with c1:
-    st.metric("Transactions", len(df))
-
-with c2:
+with col2:
     st.metric(
         "Categories",
         df["Category"].nunique() if not df.empty else 0,
     )
 
-with c3:
+with col3:
     st.metric(
         "Missing Values",
         int(df.isna().sum().sum()),
     )
 
-st.divider()
-# ==========================================================
-# PART 6 — FINAL SECTION
-# ==========================================================
-
-st.subheader("📌 Application Information")
-
-left_col, right_col = st.columns(2)
-
-with left_col:
-    st.info(
-        """
-### Features
-- Dashboard Overview
-- Transaction Search
-- Smart Filters
-- Financial Analytics
-- Category Summary
-- Monthly Summary
-- Data Export
-- Health Report
-        """
-    )
-
-with right_col:
-    st.success(
-        """
-### Current Status
-✅ Storage Initialized
-
-✅ Transactions Loaded
-
-✅ Dashboard Ready
-
-✅ Analytics Available
-
-✅ Export Enabled
-        """
-    )
-
-st.divider()
-
-# ----------------------------------------------------------
-# Data Validation
-# ----------------------------------------------------------
-
-st.subheader("🛡 Data Validation")
-
 if df.empty:
-    st.warning("Dataset is empty.")
+    st.warning("No transaction data available.")
 else:
-    st.success(f"Loaded **{len(df)}** transaction(s).")
-
-    missing = df.isna().sum().sum()
-
-    if missing == 0:
-        st.success("No missing values detected.")
+    if df.isna().sum().sum() == 0:
+        st.success("Dataset looks healthy.")
     else:
-        st.warning(f"Missing values detected: **{missing}**")
+        st.warning("Dataset contains missing values.")
 
 st.divider()
 
-# ----------------------------------------------------------
-# Footer
-# ----------------------------------------------------------
+# ==========================================================
+# RAW DATA
+# ==========================================================
+
+with st.expander("📋 View Complete Dataset"):
+
+    if df.empty:
+        st.info("No transactions to display.")
+    else:
+        st.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+st.divider()
+
+# ==========================================================
+# FOOTER
+# ==========================================================
 
 st.markdown("---")
 
 st.caption(
-    "© 2026 FinTrack AI • Personal Finance Dashboard"
+    "💰 FinTrack AI • Personal Finance Dashboard"
 )
 
 st.caption(
-    "Built with Streamlit, Pandas and Plotly"
-)
-
-
+    f"Version {info['version']} | Last Updated: {last_updated()}"
+    )
 
 
 
