@@ -896,6 +896,7 @@ def filter_transactions(
             .str.contains(
                 keyword,
                 na=False,
+                regex=False,
             )
         ]
 
